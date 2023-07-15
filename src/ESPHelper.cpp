@@ -31,16 +31,14 @@ void ESPHelper::OTA_setup()
   // No authentication by default
   // ArduinoOTA.setPassword((const char *)"123");
 
-  ArduinoOTA.onStart([&]() {
-    DBG_OUTPUT.println("OTA:\tStart");
-  });
-  ArduinoOTA.onEnd([&]() {
-    DBG_OUTPUT.println("OTA:\tEnd");
-  });
-  ArduinoOTA.onProgress([&](unsigned int progress, unsigned int total) {
-    DBG_OUTPUT.printf("OTA:\tProgress: %u%%\r\n", (progress / (total / 100)));
-  });
-  ArduinoOTA.onError([&](ota_error_t error) {
+  ArduinoOTA.onStart([&]()
+                     { DBG_OUTPUT.println("OTA:\tStart"); });
+  ArduinoOTA.onEnd([&]()
+                   { DBG_OUTPUT.println("OTA:\tEnd"); });
+  ArduinoOTA.onProgress([&](unsigned int progress, unsigned int total)
+                        { DBG_OUTPUT.printf("OTA:\tProgress: %u%%\r\n", (progress / (total / 100))); });
+  ArduinoOTA.onError([&](ota_error_t error)
+                     {
     DBG_OUTPUT.printf("OTA:\tError[%u]: ", error);
     if (error == OTA_AUTH_ERROR)
       DBG_OUTPUT.println("OTA:\tAuth Failed");
@@ -51,13 +49,13 @@ void ESPHelper::OTA_setup()
     else if (error == OTA_RECEIVE_ERROR)
       DBG_OUTPUT.println("OTA:\tReceive Failed");
     else if (error == OTA_END_ERROR)
-      DBG_OUTPUT.println("OTA:\tEnd Failed");
-  });
+      DBG_OUTPUT.println("OTA:\tEnd Failed"); });
   ArduinoOTA.begin();
   DBG_OUTPUT.println("OTA:\tbegin");
 }
 
-bool ESPHelper::config(Config_t c) {
+bool ESPHelper::config(Config_t c)
+{
 
   if (!c.stSSID || !c.stPASS || !c.ip)
     return false;
@@ -76,50 +74,46 @@ bool ESPHelper::config(Config_t c) {
   con.apSSID = c.apSSID;
   con.apPASS = c.apPASS;
 
-
-
   return true;
 }
-
 
 void ESPHelper::setup(Config_t c, bool _usingTelnet, bool _usingOTA)
 {
   usingTelnet = _usingTelnet;
   usingOTA = _usingOTA;
 
-
-
   SPIFFS.begin();
-  //called when the url is not defined here
-  //use it to load content from SPIFFS
-  server.onNotFound([&]() {
+  // called when the url is not defined here
+  // use it to load content from SPIFFS
+  server.onNotFound([&]()
+                    {
     if (!checkAuthentication())
       return;
     if (!handleFileRead(server.uri()))
-      server.send(404, "text/plain", "File Not Found");
-  });
+      server.send(404, "text/plain", "File Not Found"); });
 
-  if (config(c)) {
-    if(!setupST())
+  if (config(c))
+  {
+    if (!setupST())
       setupAP();
   }
 
-  if(usingOTA)
+  if (usingOTA)
     OTA_setup();
 
-  if(usingTelnet){
+  if (usingTelnet)
+  {
     TelnetServer.begin();
     TelnetServer.setNoDelay(true);
   }
-
 }
 
 void ESPHelper::loop()
 {
-  if(usingOTA)
+  if (usingOTA)
     ArduinoOTA.handle();
 
-  if(usingTelnet)
+  if (usingTelnet)
     handleTelnet();
 
   server.handleClient();
@@ -185,16 +179,17 @@ void ESPHelper::launchWeb(int webtype)
   DBG_OUTPUT.println("Server started");
 }
 
-
 bool ESPHelper::setupST()
 {
   WiFi.mode(WIFI_STA);
   IPAddress ip, gateway, subnet, dns;
   bool isOk = ip.fromString(con.ip) && gateway.fromString(con.gateway) && subnet.fromString(con.subnet) && dns.fromString(con.dns);
 
-  if (isOk && WiFi.config(ip, gateway, subnet, dns)) {
+  if (isOk && WiFi.config(ip, gateway, subnet, dns))
+  {
     WiFi.begin(con.stSSID.c_str(), con.stPASS.c_str());
-    if (testWifi()){
+    if (testWifi())
+    {
       launchWeb(0);
       return true;
     }
@@ -337,7 +332,7 @@ void ESPHelper::handleFileUpload()
   }
   else if (upload.status == UPLOAD_FILE_WRITE)
   {
-    //DBG_OUTPUT.print("handleFileUpload Data: "); DBG_OUTPUT.println(upload.currentSize);
+    // DBG_OUTPUT.print("handleFileUpload Data: "); DBG_OUTPUT.println(upload.currentSize);
     if (fsUploadFile)
       fsUploadFile.write(upload.buf, upload.currentSize);
   }
@@ -369,27 +364,27 @@ void ESPHelper::handleFileDelete()
 void ESPHelper::createWebServer(int webtype)
 {
 
-  on("/networks", HTTP_GET, [&]() {
-    server.send(200, "application/json", listNetworks());
-  });
+  on("/networks", HTTP_GET, [&]()
+     { server.send(200, "application/json", listNetworks()); });
 
-  //delete file
-  on("/upload", HTTP_DELETE, [&]() {
+  // delete file
+  on("/upload", HTTP_DELETE, [&]()
+     {
     handleFileDelete();
-    server.send(200, "text/plain", "Deleted\r\n");
-  });
+    server.send(200, "text/plain", "Deleted\r\n"); });
 
-  //first callback is called after the request has ended with all parsed arguments
-  //second callback handles file uploads at that location
-  on("/upload", HTTP_POST, [&]() {
-    server.send(200, "text/plain", "Uploaded\r\n");
-  }, [&]() {
-    handleFileUpload();
-  });
+  // first callback is called after the request has ended with all parsed arguments
+  // second callback handles file uploads at that location
+  on(
+      "/upload", HTTP_POST, [&]()
+      { server.send(200, "text/plain", "Uploaded\r\n"); },
+      [&]()
+      {
+        handleFileUpload();
+      });
 
-
-   
-  on("/act", HTTP_POST, [&]() {
+  on("/act", HTTP_POST, [&]()
+     {
 
     String v_todo = server.arg("todo");
 
@@ -406,8 +401,7 @@ void ESPHelper::createWebServer(int webtype)
       }
     }
 
-    server.send(200, "application/json", content);
-  });
+    server.send(200, "application/json", content); });
 
   if (webtype == 1)
   {
@@ -419,7 +413,7 @@ void ESPHelper::createWebServer(int webtype)
   }
 }
 
-void ESPHelper::setHandlers(void (*st_h)(void), void (*ap_h)(void))
+void ESPHelper::setHandlers(ESPHelperHandler_t st_h, ESPHelperHandler_t ap_h)
 {
   stHandler = st_h;
   apHandler = ap_h;
@@ -439,7 +433,6 @@ bool ESPHelper::checkAuthentication()
   return true;
 }
 
-
 void ESPHelper::set_ap_ssid_and_pass(String ssid, String pass)
 {
   con.apSSID = ssid;
@@ -448,9 +441,9 @@ void ESPHelper::set_ap_ssid_and_pass(String ssid, String pass)
 
 void ESPHelper::on(const String &uri, HTTPMethod method, ESP8266WebServer::THandlerFunction fn, ESP8266WebServer::THandlerFunction ufn)
 {
-  server.addHandler(new MyRequestHandler([&]() {
-    return checkAuthentication();
-  }, fn, ufn, uri, method));
+  server.addHandler(new MyRequestHandler([&]()
+                                         { return checkAuthentication(); },
+                                         fn, ufn, uri, method));
 }
 
 void ESPHelper::on(const String &uri, HTTPMethod method, ESP8266WebServer::THandlerFunction fn)

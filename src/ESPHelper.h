@@ -11,160 +11,152 @@
 #include <FS.h>
 #include <ArduinoOTA.h>
 
-
-
-
-
 class ESPHelper
 {
+public:
+  typedef struct
+  {
+    String deviceName = "MyIoT";
+    String stSSID;
+    String stPASS;
+    String ip;
+    String gateway = "192.168.1.1";
+    String subnet = "255.255.255.0";
+    String dns = "8.8.8.8";
+    String www_username = "admin";
+    String www_password = "admin";
+    String apSSID = "MyIoT";
+    String apPASS = "a1234567";
+  } Config_t;
 
+  String content;
+  int statusCode;
+  bool authMode;
 
-  public:
+  bool usingTelnet = true;
+  bool usingOTA = true;
 
-    typedef struct
-    {
-      String deviceName = "MyIoT";
-      String stSSID;
-      String stPASS;
-      String ip;
-      String gateway = "192.168.1.1";
-      String subnet = "255.255.255.0";
-      String dns = "8.8.8.8";
-      String www_username = "admin";
-      String www_password = "admin";
-      String apSSID = "MyIoT";
-      String apPASS = "a1234567";
-    } Config_t;
+  // Create an instance of the server
+  // specify the port to listen on as an argument
+  ESP8266WebServer server;
 
+  WiFiServer TelnetServer;
+  WiFiClient Telnet;
 
-    String content;
-    int statusCode;
-    bool authMode;
+  Stream *dbg_out;
 
-    bool usingTelnet = true;
-    bool usingOTA = true;
+  Config_t con;
 
-    // Create an instance of the server
-    // specify the port to listen on as an argument
-    ESP8266WebServer server;
+  // holds the current upload
+  File fsUploadFile;
 
-    WiFiServer TelnetServer;
-    WiFiClient Telnet;
+  typedef std::function<void(void)> ESPHelperHandler_t;
+  ESPHelperHandler_t stHandler;
+  ESPHelperHandler_t apHandler;
 
-    Stream *dbg_out;
+  bool (*configHandler)(String *, String *, String *, String *, String *, String *, String *);
 
+  ESPHelper() : server(80), TelnetServer(23)
+  {
+    dbg_out = &Telnet;
+  }
+  ESPHelper(Stream *s) : server(80), TelnetServer(23)
+  {
+    dbg_out = s;
+  }
 
-    Config_t con;
+  void setup(Config_t c, bool _usingTelnet = true, bool _usingOTA = true);
+  bool config(Config_t);
+  void loop();
+  void handleTelnet();
+  void OTA_setup();
+  bool setupST();
+  void setupAP();
 
-    //holds the current upload
-    File fsUploadFile;
+  void set_ap_ssid_and_pass(String ssid, String pass);
 
-    void (*stHandler)(void);
-    void (*apHandler)(void);
+  bool testWifi(void);
+  void launchWeb(int webtype);
 
-    bool (*configHandler)(String *, String *, String *, String *, String *, String *, String *);
+  String listNetworks(void);
 
-    ESPHelper() : server(80), TelnetServer(23)
-    {
-      dbg_out = &Telnet;
-    }
-    ESPHelper(Stream *s) : server(80), TelnetServer(23)
-    {
-      dbg_out = s;
-    }
+  void active_auth_mode();
+  void deactive_auth_mode();
 
-    void setup(Config_t c, bool _usingTelnet = true, bool _usingOTA = true);
-    bool config(Config_t);
-    void loop();
-    void handleTelnet();
-    void OTA_setup();
-    bool setupST();
-    void setupAP();
+  String getContentType(String filename);
+  bool handleFileRead(String path);
+  void handleFileUpload();
+  void handleFileDelete();
 
-    void set_ap_ssid_and_pass(String ssid, String pass);
+  void printMyTime();
 
-    bool testWifi(void);
-    void launchWeb(int webtype);
+  void createWebServer(int webtype);
+  void setHandlers(ESPHelperHandler_t st_h, ESPHelperHandler_t ap_h);
 
-    String listNetworks(void);
+  bool checkAuthentication();
 
-    void active_auth_mode();
-    void deactive_auth_mode();
-
-    String getContentType(String filename);
-    bool handleFileRead(String path);
-    void handleFileUpload();
-    void handleFileDelete();
-
-    void printMyTime();
-
-    void createWebServer(int webtype);
-    void setHandlers(void (*st_h)(void), void (*ap_h)(void));
-
-    bool checkAuthentication();
-
-    void on(const String &uri, HTTPMethod method, ESP8266WebServer::THandlerFunction fn, ESP8266WebServer::THandlerFunction ufn);
-    void on(const String &uri, HTTPMethod method, ESP8266WebServer::THandlerFunction fn);
-    void on(const String &uri, ESP8266WebServer::THandlerFunction fn);
+  void on(const String &uri, HTTPMethod method, ESP8266WebServer::THandlerFunction fn, ESP8266WebServer::THandlerFunction ufn);
+  void on(const String &uri, HTTPMethod method, ESP8266WebServer::THandlerFunction fn);
+  void on(const String &uri, ESP8266WebServer::THandlerFunction fn);
 };
 
 class MyRequestHandler : public RequestHandler
 {
-  public:
-    //typedef bool (*MyHandlerFunction)(void);
-    typedef std::function<bool(void)> AuthHandlerFunction;
+public:
+  // typedef bool (*MyHandlerFunction)(void);
+  typedef std::function<bool(void)> AuthHandlerFunction;
 
-    MyRequestHandler(AuthHandlerFunction auth, ESP8266WebServer::THandlerFunction fn, ESP8266WebServer::THandlerFunction ufn, const String &uri, HTTPMethod method)
+  MyRequestHandler(AuthHandlerFunction auth, ESP8266WebServer::THandlerFunction fn, ESP8266WebServer::THandlerFunction ufn, const String &uri, HTTPMethod method)
       : _auth(auth), _fn(fn), _ufn(ufn), _uri(uri), _method(method)
+  {
+  }
+
+  bool canHandle(HTTPMethod requestMethod, const String &requestUri) override
+  {
+    if (_method != HTTP_ANY && _method != requestMethod)
+      return false;
+
+    if (requestUri != _uri)
+      return false;
+
+    return true;
+  }
+
+  bool canUpload(const String &requestUri) override
+  {
+    if (!_ufn || !canHandle(HTTP_POST, requestUri))
+      return false;
+
+    return true;
+  }
+
+  bool handle(ESP8266WebServer &server, HTTPMethod requestMethod, const String &requestUri) override
+  {
+    (void)server;
+    if (!canHandle(requestMethod, requestUri))
+      return false;
+    if (_auth())
+      _fn();
+    return true;
+  }
+
+  void upload(ESP8266WebServer &server, const String &requestUri, HTTPUpload &upload) override
+  {
+    (void)server;
+    (void)upload;
+    if (canUpload(requestUri))
     {
-    }
-
-    bool canHandle(HTTPMethod requestMethod, const String& requestUri) override
-    {
-      if (_method != HTTP_ANY && _method != requestMethod)
-        return false;
-
-      if (requestUri != _uri)
-        return false;
-
-      return true;
-    }
-
-    bool canUpload(const String& requestUri) override
-    {
-      if (!_ufn || !canHandle(HTTP_POST, requestUri))
-        return false;
-
-      return true;
-    }
-
-    bool handle(ESP8266WebServer &server, HTTPMethod requestMethod, const String& requestUri) override
-    {
-      (void)server;
-      if (!canHandle(requestMethod, requestUri))
-        return false;
       if (_auth())
-        _fn();
-      return true;
+        _ufn();
     }
+  }
 
-    void upload(ESP8266WebServer &server, const String& requestUri, HTTPUpload &upload) override
-    {
-      (void)server;
-      (void)upload;
-      if (canUpload(requestUri))
-      {
-        if (_auth())
-          _ufn();
-      }
-    }
-
-  protected:
-    AuthHandlerFunction _auth;
-    ESP8266WebServer::THandlerFunction _fn;
-    ESP8266WebServer::THandlerFunction _ufn;
-    String _uri;
-    HTTPMethod _method;
+protected:
+  AuthHandlerFunction _auth;
+  ESP8266WebServer::THandlerFunction _fn;
+  ESP8266WebServer::THandlerFunction _ufn;
+  String _uri;
+  HTTPMethod _method;
 };
 
 #endif
